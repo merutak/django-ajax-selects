@@ -36,6 +36,7 @@ def ajax_lookup(request, channel):
             'value': lookup.get_result(item),
             'match': lookup.format_match(item),
             'repr': lookup.format_item_display(item),
+            'link': lookup.get_link(item),
             'origin': origin(item),
         } for item in instances
     ])

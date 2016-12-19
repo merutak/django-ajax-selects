@@ -32,18 +32,22 @@ $.fn.autocompleteselect = function(options) {
 			}
 			$this.val(ui.item.pk);
 			$text.val('');
-			addKiller(ui.item.repr);
+			addKiller(ui.item.repr, ui.item.pk, ui.item.link);
 			$deck.trigger("added");
 
 			return false;
 		}
 
-		function addKiller(repr,pk) {
+		function addKiller(repr, pk, link) {
 			killer_id = "kill_" + pk + id;
 			killButton = '<span class="ui-icon ui-icon-trash" id="'+killer_id+'">X</span> ';
 			if (repr) {
 				$deck.empty();
-				$deck.append("<div>" + killButton + repr + "</div>");
+				var href = "";
+				if (link){
+					href = 'href="' + link + '"' + ' target="_blank">';
+				}
+				$deck.append('<div><a ' + href + killButton + repr + ' - ' + pk + '</a></div>');
 			} else {
 				$("#"+id+"_on_deck > div").prepend(killButton);
 			}
@@ -64,11 +68,11 @@ $.fn.autocompleteselect = function(options) {
 
 		if (options.initial) {
 			its = options.initial;
-			addKiller(its[0], its[1]);
+			addKiller(its[0], its[1], its[2]);
 		}
 
 		$this.bind('didAddPopup', function(event, pk, repr) {
-			ui = { item: { pk: pk, repr: repr } }
+			ui = { item: { pk: pk, repr: repr } };
 			receiveResult(null, ui);
 		});
 	});
