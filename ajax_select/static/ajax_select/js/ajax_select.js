@@ -45,9 +45,9 @@ $.fn.autocompleteselect = function(options) {
 				$deck.empty();
 				var href = "";
 				if (link){
-					href = 'href="' + link + '"' + ' target="_blank">';
+					href = 'href="' + link + '"' + ' target="_blank"';
 				}
-				$deck.append('<div><a ' + href + killButton + repr + ' - ' + pk + '</a></div>');
+				$deck.append('<div><a ' + href + '>'+ killButton + repr + ' - ' + pk + '</a></div>');
 			} else {
 				$("#"+id+"_on_deck > div").prepend(killButton);
 			}
