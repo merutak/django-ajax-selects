@@ -1,6 +1,8 @@
 .results_on_deck .ui-icon-trash {
 	float: left;
 	cursor: pointer;
+    margin-right: 5px;
+    opacity: 0.5
 }
 .results_on_deck {
 	padding: 0.25em 0;
@@ -33,6 +35,9 @@ if max-width is not set and you are using django-admin
 	margin: 0;
 	padding: 0;
 	position: absolute;
+    background: white;
+    border: 1px solid black;
+    border-radius: 3px;
 }
 ul.ui-autocomplete li {
     list-style-type: none;
