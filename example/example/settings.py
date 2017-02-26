@@ -5,8 +5,8 @@
 INSTALLED_APPS = (
     'django.contrib.auth',
     'django.contrib.contenttypes',
+    'django.contrib.messages',
     'django.contrib.sessions',
-    'django.contrib.sites',
     'django.contrib.admin',
     'django.contrib.staticfiles',
     'example',
@@ -16,50 +16,36 @@ INSTALLED_APPS = (
     ####################################
 )
 
+MIDDLEWARE_CLASSES = (
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware'
+)
 
 ###########################################################################
 
 # DEFINE THE SEARCH CHANNELS:
 
 AJAX_LOOKUP_CHANNELS = {
-    # simplest way, automatically construct a search channel by passing a dictionary
-    'label'  : {'model':'example.label', 'search_field':'name'},
+    # simplest way, automatically construct a search channel by passing a dict
+    'label': {'model': 'example.label', 'search_field': 'name'},
 
     # Custom channels are specified with a tuple
     # channel: ( module.where_lookup_is, ClassNameOfLookup )
-    'person' : ('example.lookups', 'PersonLookup'),
-    'group'  : ('example.lookups', 'GroupLookup'),
-    'song'   : ('example.lookups', 'SongLookup'),
-    'cliche' : ('example.lookups','ClicheLookup')
+    'person': ('example.lookups', 'PersonLookup'),
+    'group': ('example.lookups', 'GroupLookup'),
+    'song': ('example.lookups', 'SongLookup'),
 }
 
 
-AJAX_SELECT_BOOTSTRAP = True
-# True: [easiest]
-#   use the admin's jQuery if present else load from jquery's CDN
-#   use jqueryUI if present else load from jquery's CDN
-#   use jqueryUI theme if present else load one from jquery's CDN
-# False/None/Not set: [default]
-#   you should include jQuery, jqueryUI + theme in your template
+# By default will use window.jQuery
+# or Django Admin's jQuery
+# or load one from google ajax apis
+# then load jquery-ui and a default css
+# Set this to False if for some reason you want to supply your own
+# window.jQuery and jQuery UI
 
-
-AJAX_SELECT_INLINES = 'inline'
-# 'inline': [easiest]
-#   includes the js and css inline
-#   this gets you up and running easily
-#   but on large admin pages or with higher traffic it will be a bit wasteful.
-# 'staticfiles':
-#   @import the css/js from {{STATIC_URL}}/ajax_selects using django's staticfiles app
-#   requires staticfiles to be installed and to run its management command to collect files
-#   this still includes the css/js multiple times and is thus inefficient
-#   but otherwise harmless
-# False/None: [default]
-#   does not inline anything. include the css/js files in your compressor stack
-#   or include them in the head of the admin/base_example.html template
-#   this is the most efficient but takes the longest to configure
-
-# when using staticfiles you may implement your own ajax_select.css and customize to taste
-
+# AJAX_SELECT_BOOTSTRAP = False
 
 
 ###########################################################################
@@ -76,17 +62,17 @@ ADMINS = (
 
 MANAGERS = ADMINS
 
-DATABASE_ENGINE = 'sqlite3'           # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
-DATABASE_NAME = 'ajax_selects_example'             # Or path to database file if using sqlite3.
+DATABASE_ENGINE = 'sqlite3'
+DATABASE_NAME = 'ajax_selects_example_db'
 DATABASE_USER = ''             # Not used with sqlite3.
 DATABASE_PASSWORD = ''         # Not used with sqlite3.
-DATABASE_HOST = ''             # Set to empty string for localhost. Not used with sqlite3.
-DATABASE_PORT = ''             # Set to empty string for default. Not used with sqlite3.
+DATABASE_HOST = ''             # Not used with sqlite3.
+DATABASE_PORT = ''             # Not used with sqlite3.
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': 'ajax_selects_example'
+        'NAME': 'ajax_selects_example_db'
     }
 }
 
@@ -103,8 +89,6 @@ LANGUAGE_CODE = 'en-us'
 
 # for testing translations
 # LANGUAGE_CODE = 'de-at'
-
-SITE_ID = 1
 
 # If you set this to False, Django will make some optimizations so as not
 # to load the internationalization machinery.
@@ -123,7 +107,7 @@ MEDIA_URL = ''
 # URL prefix for admin media -- CSS, JavaScript and images. Make sure to use a
 # trailing slash.
 # Examples: "http://foo.com/media/", "/media/".
-STATIC_URL = '/media/'
+STATIC_URL = '/static/'
 
 # Make this unique, and don't share it with nobody.
 SECRET_KEY = '=9fhrrwrazha6r_m)r#+in*@n@i322ubzy4r+zz%wz$+y(=qpb'
@@ -131,8 +115,37 @@ SECRET_KEY = '=9fhrrwrazha6r_m)r#+in*@n@i322ubzy4r+zz%wz$+y(=qpb'
 
 ROOT_URLCONF = 'example.urls'
 
+# Django < 1.8
 TEMPLATE_DIRS = (
-    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
+    # Put strings here, like "/home/html/django_templates"
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
 )
+
+# Django >= 1.8
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [
+            # insert your TEMPLATE_DIRS here
+        ],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                # Insert your TEMPLATE_CONTEXT_PROCESSORS here or use this
+                # list if you haven't customized them:
+                'django.contrib.auth.context_processors.auth',
+                'django.template.context_processors.debug',
+                'django.template.context_processors.i18n',
+                'django.template.context_processors.media',
+                'django.template.context_processors.static',
+                'django.template.context_processors.tz',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+        # TEMPLATE_LOADERS = (
+        #     'django.template.loaders.filesystem.Loader',
+        #     'django.template.loaders.app_directories.Loader'
+        # )
+    }
+]

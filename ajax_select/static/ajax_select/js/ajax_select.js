@@ -1,30 +1,13 @@
+(function() {
 
-if(typeof $jq16.fn.autocompletehtml != 'function') {
+  var $ = window.jQuery;
 
-(function($) {
-
-$.fn.autocompletehtml = function() {
-	var $text = $(this), sizeul = true;
-	this.data("autocomplete")._renderItem = function _renderItemHTML(ul, item) {
-		if(sizeul) {
-			if(ul.css('max-width')=='none') ul.css('max-width',$text.outerWidth());
-			sizeul = false;
-		}
-		return $("<li></li>")
-			.data("item.autocomplete", item)
-			.append("<a>" + item.value + "</a>")
-			.appendTo(ul);
-	};
-	return this;
-}
 $.fn.autocompleteselect = function(options) {
-
 	return this.each(function() {
-		var id = this.id;
-		var $this = $(this);
-
-		var $text = $("#"+id+"_text");
-		var $deck = $("#"+id+"_on_deck");
+      var id = this.id,
+          $this = $(this),
+          $text = $('#' + id + '_text'),
+          $deck = $('#' + id + '_on_deck');
 
 		function receiveResult(event, ui) {
 			if ($this.val()) {
@@ -32,15 +15,16 @@ $.fn.autocompleteselect = function(options) {
 			}
 			$this.val(ui.item.pk);
 			$text.val('');
-			addKiller(ui.item.repr, ui.item.pk, ui.item.link);
-			$deck.trigger("added");
+        addKiller(ui.item.repr, ui.item.pk, ui.item.link);
+        $deck.trigger('added', [ui.item.pk, ui.item]);
+        $this.trigger('change');
 
 			return false;
 		}
 
 		function addKiller(repr, pk, link) {
-			killer_id = "kill_" + pk + id;
-			killButton = '<span class="ui-icon ui-icon-trash" id="'+killer_id+'">X</span> ';
+        var killId = 'kill_' + pk + id,
+            killButton = '<span class="ui-icon ui-icon-trash" id="' + killId + '">X</span> ';
 			if (repr) {
 				$deck.empty();
 				var href = "";
@@ -49,11 +33,11 @@ $.fn.autocompleteselect = function(options) {
 				}
 				$deck.append('<div><a ' + href + '>'+ killButton + repr + ' - ' + pk + '</a></div>');
 			} else {
-				$("#"+id+"_on_deck > div").prepend(killButton);
+          $('#' + id + '_on_deck > div').prepend(killButton);
 			}
-			$("#" + killer_id).click(function() {
+        $('#' + killId).click(function() {
 				kill();
-				$deck.trigger("killed");
+          $deck.trigger('killed', [pk]);
 			});
 		}
 
@@ -64,101 +48,205 @@ $.fn.autocompleteselect = function(options) {
 
 		options.select = receiveResult;
 		$text.autocomplete(options);
-		$text.autocompletehtml();
 
+      function reset() {
 		if (options.initial) {
-			its = options.initial;
-			addKiller(its[0], its[1], its[2]);
+          addKiller(options.initial[0], options.initial[1], options.initial[2]);
+          $this.val(options.initial[1]);
+        } else {
+          kill();
+        }
+      }
+
+      if (!$this.attr('data-changed')) {
+        reset();
+        $this.attr('data-changed', true);
 		}
 
+      $this.closest('form').on('reset', reset);
+
 		$this.bind('didAddPopup', function(event, pk, repr) {
-			ui = { item: { pk: pk, repr: repr } };
-			receiveResult(null, ui);
+        receiveResult(null, {item: {pk: pk, repr: repr}});
 		});
 	});
 };
 
 $.fn.autocompleteselectmultiple = function(options) {
 	return this.each(function() {
-		var id = this.id;
-
-		var $this = $(this);
-		var $text = $("#"+id+"_text");
-		var $deck = $("#"+id+"_on_deck");
+      var id = this.id,
+          $this = $(this),
+          $text = $('#' + id + '_text'),
+          $deck = $('#' + id + '_on_deck');
 
 		function receiveResult(event, ui) {
-			pk = ui.item.pk;
+        var pk = ui.item.pk,
 			prev = $this.val();
 
-			if (prev.indexOf("|"+pk+"|") == -1) {
-				$this.val((prev ? prev : "|") + pk + "|");
+        if (prev.indexOf('|' + pk + '|') === -1) {
+          $this.val((prev ? prev : '|') + pk + '|');
 				addKiller(ui.item.repr, pk);
 				$text.val('');
-				$deck.trigger("added");
+          $deck.trigger('added', [ui.item.pk, ui.item]);
+          $this.trigger('change');
 			}
-
 			return false;
 		}
 
 		function addKiller(repr, pk) {
-			killer_id = "kill_" + pk + id;
-			killButton = '<span class="ui-icon ui-icon-trash" id="'+killer_id+'">X</span> ';
+        var killId = 'kill_' + pk + id,
+            killButton = '<span class="ui-icon ui-icon-trash" id="' + killId + '">X</span> ';
 			$deck.append('<div id="'+id+'_on_deck_'+pk+'">' + killButton + repr + ' </div>');
 
-			$("#"+killer_id).click(function() {
+        $('#' + killId).click(function() {
 				kill(pk);
-				$deck.trigger("killed");
+          $deck.trigger('killed', [pk]);
 			});
 		}
 
 		function kill(pk) {
-			$this.val($this.val().replace("|" + pk + "|", "|"));
-			$("#"+id+"_on_deck_"+pk).fadeOut().remove();
+        $this.val($this.val().replace('|' + pk + '|', '|'));
+        $('#' + id + '_on_deck_' + pk).fadeOut().remove();
 		}
 
 		options.select = receiveResult;
 		$text.autocomplete(options);
-		$text.autocompletehtml();
 
+      function reset() {
+        $deck.empty();
+        var query = '|';
 		if (options.initial) {
 			$.each(options.initial, function(i, its) {
 				addKiller(its[0], its[1]);
+            query += its[1] + '|';
 			});
 		}
+        $this.val(query);
+      }
+
+      if (!$this.attr('data-changed')) {
+        reset();
+        $this.attr('data-changed', true);
+      }
+
+      $this.closest('form').on('reset', reset);
 
 		$this.bind('didAddPopup', function(event, pk, repr) {
-			ui = { item: { pk: pk, repr: repr } }
-			receiveResult(null, ui);
+        receiveResult(null, {item: {pk: pk, repr: repr}});
 		});
 	});
 };
 
-window.addAutoComplete = function (prefix_id, callback ) { /*(html_id)*/
-	/* detects inline forms and converts the html_id if needed */
-	var prefix = 0;
-	var html_id = prefix_id;
-	if(html_id.indexOf("__prefix__") != -1) {
-		// Some dirty loop to find the appropriate element to apply the callback to
-		while ($('#'+html_id).length) {
-			html_id = prefix_id.replace(/__prefix__/, prefix++);
+  function addAutoComplete (inp, callback) {
+    var $inp = $(inp),
+        opts = JSON.parse($inp.attr('data-plugin-options'));
+    // Do not activate empty-form inline rows.
+    // These are cloned into the form when adding another row and will be activated at that time.
+    if ($inp.attr('id').indexOf('__prefix__') !== -1) {
+      // console.log('skipping __prefix__ row', $inp);
+      return;
 		}
-		html_id = prefix_id.replace(/__prefix__/, prefix-2);
-		// Ignore the first call to this function, the one that is triggered when
-		// page is loaded just because the "empty" form is there.
-		if ($("#"+html_id+", #"+html_id+"_text").hasClass("ui-autocomplete-input"))
+    if ($inp.data('_ajax_select_inited_')) {
+      // console.log('skipping already activated row', $inp);
 			return;
 	}
-	callback(html_id);
+    // console.log('activating', $inp);
+    callback($inp, opts);
+    $inp.data('_ajax_select_inited_', true);
 }
-/*	the popup handler
-	requires RelatedObjects.js which is part of the django admin js
-	so if using outside of the admin then you would need to include that manually */
-window.didAddPopup = function (win,newId,newRepr) {
-	var name = windowname_to_id(win.name);
-	$("#"+name).trigger('didAddPopup',[html_unescape(newId),html_unescape(newRepr)]);
+
+  // allow html in the results menu
+  // https://github.com/scottgonzalez/jquery-ui-extensions
+  var proto = $.ui.autocomplete.prototype,
+      initSource = proto._initSource;
+
+  function filter(array, term) {
+    var matcher = new RegExp($.ui.autocomplete.escapeRegex(term), 'i');
+    return $.grep(array, function(value) {
+      return matcher.test($('<div>').html(value.label || value.value || value).text());
+    });
+  }
+
+  $.extend(proto, {
+    _initSource: function() {
+      if (this.options.html && $.isArray(this.options.source)) {
+        this.source = function(request, response) {
+          response(filter(this.options.source, request.term));
+        };
+      } else {
+        initSource.call(this);
+      }
+    },
+    _renderItem: function(ul, item) {
+      var body = this.options.html ? item.match: item.label;
+      return $('<li></li>')
+        .data('item.autocomplete', item)
+        .append($('<a></a>')[this.options.html ? 'html' : 'text' ](body))
+        .appendTo(ul);
+    }
+  });
+
+  /* Called by the popup create object when it closes.
+   * For the popup this is opener.dismissAddRelatedObjectPopup
+   * Django implements this in RelatedObjectLookups.js
+   * In django >= 1.10 we can rely on input.trigger('change')
+   * and avoid this hijacking.
+   */
+  var djangoDismissAddRelatedObjectPopup = window.dismissAddRelatedObjectPopup || window.dismissAddAnotherPopup;
+  window.dismissAddRelatedObjectPopup = function(win, newId, newRepr) {
+    // Iff this is an ajax-select input then close the window and
+    // trigger didAddPopup
+    var name = window.windowname_to_id(win.name);
+    var input = $('#' + name);
+    if (input.data('ajax-select')) {
 	win.close();
+      // newRepr is django's repr of object
+      // not the Lookup's formatting of it.
+      input.trigger('didAddPopup', [newId, newRepr]);
+    } else {
+      // Call the normal django set and close function.
+      djangoDismissAddRelatedObjectPopup(win, newId, newRepr);
+    }
 }
+  // Django renamed this function in 1.8
+  window.dismissAddAnotherPopup = window.dismissAddRelatedObjectPopup;
 
-})($jq16);
+  // activate any on page
+  $(window).bind('init-autocomplete', function() {
 
-}
+    $('input[data-ajax-select=autocomplete]').each(function(i, inp) {
+      addAutoComplete(inp, function($inp, opts) {
+        opts.select =
+            function(event, ui) {
+              $inp.val(ui.item.value).trigger('added', [ui.item.pk, ui.item]);
+              return false;
+            };
+        $inp.autocomplete(opts);
+      });
+    });
+
+    $('input[data-ajax-select=autocompleteselect]').each(function(i, inp) {
+      addAutoComplete(inp, function($inp, opts) {
+        $inp.autocompleteselect(opts);
+      });
+    });
+
+    $('input[data-ajax-select=autocompleteselectmultiple]').each(function(i, inp) {
+      addAutoComplete(inp, function($inp, opts) {
+        $inp.autocompleteselectmultiple(opts);
+      });
+    });
+
+  });
+
+  $(document).ready(function() {
+    // if dynamically injecting forms onto a page
+    // you can trigger them to be ajax-selects-ified:
+    $(window).trigger('init-autocomplete');
+    // When adding new rows in inline forms, reinitialize and activate newly added rows.
+    $(document)
+      .on('click', '.inline-group ul.tools a.add, .inline-group div.add-row a, .inline-group .tabular tr.add-row td a', function() {
+        $(window).trigger('init-autocomplete');
+      });
+  });
+
+})();

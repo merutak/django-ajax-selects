@@ -1,18 +1,25 @@
-
-from ajax_select import get_lookup
+from __future__ import unicode_literals
+import json
+from ajax_select.registry import registry
 from django import forms
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
-from django.forms.utils import flatatt
+from django.db.models.query import QuerySet
+try:
+    from django.forms.utils import flatatt
+except ImportError:
+    # < django 1.7
+    from django.forms.util import flatatt
 from django.template.loader import render_to_string
+from django.template.defaultfilters import force_escape
+from django.utils.encoding import force_text
 from django.utils.safestring import mark_safe
+from django.utils.six import text_type
 from django.utils.translation import ugettext as _
-import json
-import os
 
 
-as_default_help = u'Enter text to search.'
+as_default_help = 'Enter text to search.'
 
 
 def _media(self):
@@ -21,129 +28,19 @@ def _media(self):
     # where needed
     js = ('ajax_select/js/bootstrap.js', 'ajax_select/js/ajax_select.js')
     try:
-        if settings.AJAX_SELECT_BOOTSTRAP == False:
+        if not settings.AJAX_SELECT_BOOTSTRAP:
             js = ('ajax_select/js/ajax_select.js',)
     except AttributeError:
         pass
     return forms.Media(css={'all': ('ajax_select/css/ajax_select.css',)}, js=js)
 
+
 ####################################################################################
+
 
 class AutoCompleteSelectWidget(forms.widgets.TextInput):
 
-    """  widget to select a model and return it as text """
-
-    media = property(_media)
-
-    add_link = None
-
-    def __init__(self,
-                 channel,
-                 help_text = u'',
-                 show_help_text = True,
-                 plugin_options = {},
-                 *args, **kwargs):
-        self.plugin_options = plugin_options
-        super(forms.widgets.TextInput, self).__init__(*args, **kwargs)
-        self.channel = channel
-        self.help_text = help_text
-        self.show_help_text = show_help_text
-
-    def render(self, name, value, attrs=None):
-
-        value = value or ''
-        final_attrs = self.build_attrs(attrs)
-        self.html_id = final_attrs.pop('id', name)
-
-        current_repr = ''
-        current_link = ''
-        initial = None
-        lookup = get_lookup(self.channel)
-        if value:
-            objs = lookup.get_objects([value])
-            try:
-                obj = objs[0]
-            except IndexError:
-                raise Exception("%s cannot find object:%s" % (lookup, value))
-            current_repr = lookup.get_result(obj)
-            current_link = lookup.get_link(obj)
-            initial = [current_repr,obj.pk, current_link]
-
-        if self.show_help_text:
-            help_text = self.help_text
-        else:
-            help_text = u''
-
-        context = {
-            'name': name,
-            'html_id': self.html_id,
-            'current_id': value,
-            'current_repr': current_repr,
-            'current_link': current_link,
-            'help_text': help_text,
-            'extra_attrs': mark_safe(flatatt(final_attrs)),
-            'func_slug': self.html_id.replace("-",""),
-            'add_link': self.add_link,
-        }
-        context.update(plugin_options(lookup,self.channel,self.plugin_options,initial))
-        context.update(bootstrap())
-
-        return mark_safe(render_to_string(('autocompleteselect_%s.html' % self.channel, 'autocompleteselect.html'),context))
-
-    def value_from_datadict(self, data, files, name):
-
-        return data.get(name, None) or None
-
-    def id_for_label(self, id_):
-        return '%s_text' % id_
-
-
-
-class AutoCompleteSelectField(forms.fields.CharField):
-
-    """  form field to select a model for a ForeignKey db field """
-
-    channel = None
-
-    def __init__(self, channel, *args, **kwargs):
-        self.channel = channel
-        widget = kwargs.get("widget", False)
-
-        if not widget or not isinstance(widget, AutoCompleteSelectWidget):
-            widget_kwargs = dict(
-                channel = channel,
-                help_text = kwargs.get('help_text',_(as_default_help)),
-                show_help_text = kwargs.pop('show_help_text',True),
-                plugin_options = kwargs.pop('plugin_options',{})
-            )
-            kwargs["widget"] = AutoCompleteSelectWidget(**widget_kwargs)
-        super(AutoCompleteSelectField, self).__init__(max_length=255,*args, **kwargs)
-
-    def clean(self, value):
-        if value:
-            lookup = get_lookup(self.channel)
-            objs = lookup.get_objects( [ value] )
-            if len(objs) != 1:
-                # someone else might have deleted it while you were editing
-                # or your channel is faulty
-                # out of the scope of this field to do anything more than tell you it doesn't exist
-                raise forms.ValidationError(u"%s cannot find object: %s" % (lookup,value))
-            return objs[0]
-        else:
-            if self.required:
-                raise forms.ValidationError(self.error_messages['required'])
-            return None
-
-    def check_can_add(self,user,model):
-        _check_can_add(self,user,model)
-
-
-####################################################################################
-
-
-class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
-
-    """ widget to select multiple models """
+    """Widget to search for a model and return it as text for use in a CharField."""
 
     media = property(_media)
 
@@ -153,14 +50,133 @@ class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
                  channel,
                  help_text='',
                  show_help_text=True,
-                 plugin_options = {},
-                 *args, **kwargs):
+                 plugin_options=None,
+                 *args,
+                 **kwargs):
+        self.plugin_options = plugin_options or {}
+        super(forms.widgets.TextInput, self).__init__(*args, **kwargs)
+        self.channel = channel
+        self.help_text = help_text
+        self.show_help_text = show_help_text
+
+    def render(self, name, value, attrs=None):
+        value = value or ''
+        final_attrs = self.build_attrs(attrs)
+        self.html_id = final_attrs.pop('id', name)
+
+        current_repr = ''
+        current_link = ''
+        initial = None
+        lookup = registry.get(self.channel)
+        if value:
+            objs = lookup.get_objects([value])
+            try:
+                obj = objs[0]
+            except IndexError:
+                raise Exception("%s cannot find object:%s" % (lookup, value))
+            current_repr = lookup.get_result(obj)
+            current_link = lookup.get_link(obj)
+            initial = [current_repr, obj.pk, current_link]
+
+        if self.show_help_text:
+            help_text = self.help_text
+        else:
+            help_text = ''
+
+        context = {
+            'name': name,
+            'html_id': self.html_id,
+            'current_id': value,
+            'current_repr': current_repr,
+            'current_link': current_link,
+            'help_text': help_text,
+            'extra_attrs': mark_safe(flatatt(final_attrs)),
+            'func_slug': self.html_id.replace("-", ""),
+            'add_link': self.add_link,
+        }
+        context.update(make_plugin_options(lookup, self.channel, self.plugin_options, initial))
+        templates = (
+            'ajax_select/autocompleteselect_%s.html' % self.channel,
+            'ajax_select/autocompleteselect.html')
+        out = render_to_string(templates, context)
+        return mark_safe(out)
+
+    def value_from_datadict(self, data, files, name):
+
+        return data.get(name, None) or None
+
+    def id_for_label(self, id_):
+        return '%s_text' % id_
+
+
+class AutoCompleteSelectField(forms.fields.CharField):
+
+    """Form field to select a Model for a ForeignKey db field."""
+
+    channel = None
+
+    def __init__(self, channel, *args, **kwargs):
+        self.channel = channel
+
+        widget_kwargs = dict(
+            channel=channel,
+            help_text=kwargs.get('help_text', _(as_default_help)),
+            show_help_text=kwargs.pop('show_help_text', True),
+            plugin_options=kwargs.pop('plugin_options', {})
+        )
+        widget_kwargs.update(kwargs.pop('widget_options', {}))
+        kwargs["widget"] = AutoCompleteSelectWidget(**widget_kwargs)
+        super(AutoCompleteSelectField, self).__init__(max_length=255, *args, **kwargs)
+
+    def clean(self, value):
+        if value:
+            lookup = registry.get(self.channel)
+            objs = lookup.get_objects([value])
+            if len(objs) != 1:
+                # someone else might have deleted it while you were editing
+                # or your channel is faulty
+                # out of the scope of this field to do anything more than tell you it doesn't exist
+                raise forms.ValidationError("%s cannot find object: %s" % (lookup, value))
+            return objs[0]
+        else:
+            if self.required:
+                raise forms.ValidationError(self.error_messages['required'])
+            return None
+
+    def check_can_add(self, user, model):
+        _check_can_add(self, user, model)
+
+    def has_changed(self, initial, data):
+        # 1 vs u'1'
+        initial_value = initial if initial is not None else ''
+        data_value = data if data is not None else ''
+        return text_type(initial_value) != text_type(data_value)
+
+
+####################################################################################
+
+
+class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
+
+    """Widget to select multiple models for a ManyToMany db field."""
+
+    media = property(_media)
+
+    add_link = None
+
+    def __init__(self,
+                 channel,
+                 help_text='',
+                 show_help_text=True,
+                 plugin_options=None,
+                 *args,
+                 **kwargs):
         super(AutoCompleteSelectMultipleWidget, self).__init__(*args, **kwargs)
         self.channel = channel
 
         self.help_text = help_text
         self.show_help_text = show_help_text
-        self.plugin_options = plugin_options
+        self.plugin_options = plugin_options or {}
 
     def render(self, name, value, attrs=None):
 
@@ -170,26 +186,25 @@ class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
         final_attrs = self.build_attrs(attrs)
         self.html_id = final_attrs.pop('id', name)
 
-        lookup = get_lookup(self.channel)
+        lookup = registry.get(self.channel)
 
-        # eg. value = [3002L, 1194L]
-        if value:
-            current_ids = "|" + "|".join( str(pk) for pk in value ) + "|" # |pk|pk| of current
+        if isinstance(value, QuerySet):
+            objects = value
         else:
-            current_ids = "|"
+            objects = lookup.get_objects(value)
 
-        objects = lookup.get_objects(value)
+        current_ids = pack_ids([obj.pk for obj in objects])
 
         # text repr of currently selected items
-        initial = []
-        for obj in objects:
-            display = lookup.get_result(obj)
-            initial.append([display,obj.pk])
+        initial = [
+            [lookup.get_result(obj), obj.pk]
+            for obj in objects
+        ]
 
         if self.show_help_text:
             help_text = self.help_text
         else:
-            help_text = u''
+            help_text = ''
 
         context = {
             'name':name,
@@ -199,21 +214,21 @@ class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
             'current_reprs':mark_safe(json.dumps(initial)),
             'help_text':help_text,
             'extra_attrs': mark_safe(flatatt(final_attrs)),
-            'func_slug': self.html_id.replace("-",""),
-            'add_link' : self.add_link,
+            'func_slug': self.html_id.replace("-", ""),
+            'add_link': self.add_link,
         }
-        context.update(plugin_options(lookup,self.channel,self.plugin_options,initial))
-        context.update(bootstrap())
-
-        return mark_safe(render_to_string(('autocompleteselectmultiple_%s.html' % self.channel, 'autocompleteselectmultiple.html'),context))
+        context.update(make_plugin_options(lookup, self.channel, self.plugin_options, initial))
+        templates = ('ajax_select/autocompleteselectmultiple_%s.html' % self.channel,
+                    'ajax_select/autocompleteselectmultiple.html')
+        out = render_to_string(templates, context)
+        return mark_safe(out)
 
     def value_from_datadict(self, data, files, name):
-        # eg. u'members': [u'|229|4688|190|']
-        return [long(val) for val in data.get(name,'').split('|') if val]
+        # eg. 'members': ['|229|4688|190|']
+        return [val for val in data.get(name, '').split('|') if val]
 
     def id_for_label(self, id_):
         return '%s_text' % id_
-
 
 
 class AutoCompleteSelectMultipleField(forms.fields.CharField):
@@ -226,30 +241,32 @@ class AutoCompleteSelectMultipleField(forms.fields.CharField):
         self.channel = channel
 
         help_text = kwargs.get('help_text')
-        show_help_text = kwargs.pop('show_help_text',False)
+        show_help_text = kwargs.pop('show_help_text', False)
 
         if not (help_text is None):
             # '' will cause translation to fail
-            # should be u''
-            if type(help_text) == str:
-                help_text = unicode(help_text)
+            # should be ''
+            if isinstance(help_text, str):
+                help_text = force_text(help_text)
             # django admin appends "Hold down "Control",..." to the help text
-            # regardless of which widget is used. so even when you specify an explicit help text it appends this other default text onto the end.
+            # regardless of which widget is used. so even when you specify an explicit
+            # help text it appends this other default text onto the end.
             # This monkey patches the help text to remove that
-            if help_text != u'':
-                if type(help_text) != unicode:
+            if help_text != '':
+                if not isinstance(help_text, text_type):
                     # ideally this could check request.LANGUAGE_CODE
                     translated = help_text.translate(settings.LANGUAGE_CODE)
                 else:
                     translated = help_text
-                django_default_help = _(u'Hold down "Control", or "Command" on a Mac, to select more than one.').translate(settings.LANGUAGE_CODE)
+                dh = 'Hold down "Control", or "Command" on a Mac, to select more than one.'
+                django_default_help = _(dh).translate(settings.LANGUAGE_CODE)
                 if django_default_help in translated:
-                    cleaned_help = translated.replace(django_default_help,'').strip()
+                    cleaned_help = translated.replace(django_default_help, '').strip()
                     # probably will not show up in translations
                     if cleaned_help:
                         help_text = cleaned_help
                     else:
-                        help_text = u""
+                        help_text = ""
                         show_help_text = False
         else:
             help_text = _(as_default_help)
@@ -263,8 +280,9 @@ class AutoCompleteSelectMultipleField(forms.fields.CharField):
             'channel': channel,
             'help_text': help_text,
             'show_help_text': show_help_text,
-            'plugin_options': kwargs.pop('plugin_options',{})
+            'plugin_options': kwargs.pop('plugin_options', {})
         }
+        widget_kwargs.update(kwargs.pop('widget_options', {}))
         kwargs['widget'] = AutoCompleteSelectMultipleWidget(**widget_kwargs)
         kwargs['help_text'] = help_text
 
@@ -273,11 +291,16 @@ class AutoCompleteSelectMultipleField(forms.fields.CharField):
     def clean(self, value):
         if not value and self.required:
             raise forms.ValidationError(self.error_messages['required'])
-        return value # a list of IDs from widget value_from_datadict
+        return value  # a list of primary keys from widget value_from_datadict
 
-    def check_can_add(self,user,model):
-        _check_can_add(self,user,model)
+    def check_can_add(self, user, model):
+        _check_can_add(self, user, model)
 
+    def has_changed(self, initial_value, data_value):
+        # [1, 2] vs [u'1', u'2']
+        ivs = [text_type(v) for v in (initial_value or [])]
+        dvs = [text_type(v) for v in (data_value or [])]
+        return ivs != dvs
 
 ####################################################################################
 
@@ -298,8 +321,8 @@ class AutoCompleteWidget(forms.TextInput):
     def __init__(self, channel, *args, **kwargs):
         self.channel = channel
         self.help_text = kwargs.pop('help_text', '')
-        self.show_help_text = kwargs.pop('show_help_text',True)
-        self.plugin_options = kwargs.pop('plugin_options',{})
+        self.show_help_text = kwargs.pop('show_help_text', True)
+        self.plugin_options = kwargs.pop('plugin_options', {})
 
         super(AutoCompleteWidget, self).__init__(*args, **kwargs)
 
@@ -310,11 +333,11 @@ class AutoCompleteWidget(forms.TextInput):
         final_attrs = self.build_attrs(attrs)
         self.html_id = final_attrs.pop('id', name)
 
-        lookup = get_lookup(self.channel)
+        lookup = registry.get(self.channel)
         if self.show_help_text:
             help_text = self.help_text
         else:
-            help_text = u''
+            help_text = ''
 
         context = {
             'current_repr': initial,
@@ -323,20 +346,17 @@ class AutoCompleteWidget(forms.TextInput):
             'html_id': self.html_id,
             'name': name,
             'extra_attrs': mark_safe(flatatt(final_attrs)),
-            'func_slug': self.html_id.replace("-",""),
+            'func_slug': self.html_id.replace("-", ""),
         }
-        context.update(plugin_options(lookup,self.channel,self.plugin_options,initial))
-        context.update(bootstrap())
-
-        templates = ('autocomplete_%s.html' % self.channel,
-                     'autocomplete.html')
+        context.update(make_plugin_options(lookup, self.channel, self.plugin_options, initial))
+        templates = ('ajax_select/autocomplete_%s.html' % self.channel,
+                     'ajax_select/autocomplete.html')
         return mark_safe(render_to_string(templates, context))
-
 
 
 class AutoCompleteField(forms.CharField):
     """
-    Field uses an AutoCompleteWidget to lookup possible completions using a channel and stores raw text (not a foreign key)
+    A CharField that uses an AutoCompleteWidget to lookup matching and stores the result as plain text.
     """
     channel = None
 
@@ -344,15 +364,16 @@ class AutoCompleteField(forms.CharField):
         self.channel = channel
 
         widget_kwargs = dict(
-            help_text = kwargs.get('help_text', _(as_default_help)),
-            show_help_text = kwargs.pop('show_help_text',True),
-            plugin_options = kwargs.pop('plugin_options',{})
+            help_text=kwargs.get('help_text', _(as_default_help)),
+            show_help_text=kwargs.pop('show_help_text', True),
+            plugin_options=kwargs.pop('plugin_options', {})
         )
+        widget_kwargs.update(kwargs.pop('widget_options', {}))
         if 'attrs' in kwargs:
             widget_kwargs['attrs'] = kwargs.pop('attrs')
-        widget = AutoCompleteWidget(channel,**widget_kwargs)
+        widget = AutoCompleteWidget(channel, **widget_kwargs)
 
-        defaults = {'max_length': 255,'widget': widget}
+        defaults = {'max_length': 255, 'widget': widget}
         defaults.update(kwargs)
 
         super(AutoCompleteField, self).__init__(*args, **defaults)
@@ -360,67 +381,62 @@ class AutoCompleteField(forms.CharField):
 
 ####################################################################################
 
-def _check_can_add(self,user,model):
-    """ check if the user can add the model, deferring first to
-        the channel if it implements can_add()
-        else using django's default perm check.
-        if it can add, then enable the widget to show the + link
+def _check_can_add(self, user, related_model):
     """
-    lookup = get_lookup(self.channel)
-    if hasattr(lookup,'can_add'):
-        can_add = lookup.can_add(user,model)
+    Check if the User can create a related_model.
+
+    If the LookupChannel implements check_can_add() then use this.
+
+    Else uses Django's default permission system.
+
+    If it can add, then enable the widget to show the green + link
+    """
+    lookup = registry.get(self.channel)
+    if hasattr(lookup, 'can_add'):
+        can_add = lookup.can_add(user, related_model)
     else:
-        ctype = ContentType.objects.get_for_model(model)
-        can_add = user.has_perm("%s.add_%s" % (ctype.app_label,ctype.model))
+        ctype = ContentType.objects.get_for_model(related_model)
+        can_add = user.has_perm("%s.add_%s" % (ctype.app_label, ctype.model))
     if can_add:
-        self.widget.add_link = reverse('add_popup',
-            kwargs={'app_label':model._meta.app_label,'model':model._meta.object_name.lower()})
+        app_label = related_model._meta.app_label
+        model = related_model._meta.object_name.lower()
+        self.widget.add_link = reverse('admin:%s_%s_add' % (app_label, model)) + '?_popup=1'
 
 
-def autoselect_fields_check_can_add(form,model,user):
-    """ check the form's fields for any autoselect fields and enable their widgets with + sign add links if permissions allow"""
-    for name,form_field in form.declared_fields.iteritems():
-        if isinstance(form_field,(AutoCompleteSelectMultipleField,AutoCompleteSelectField)):
-            db_field = model._meta.get_field_by_name(name)[0]
-            form_field.check_can_add(user,db_field.rel.to)
+def autoselect_fields_check_can_add(form, model, user):
+    """
+    Check the form's fields for any autoselect fields and enable their
+    widgets with green + button if permissions allow then to create the related_model.
+    """
+    for name, form_field in form.declared_fields.items():
+        if isinstance(form_field, (AutoCompleteSelectMultipleField, AutoCompleteSelectField)):
+            db_field = model._meta.get_field(name)
+            form_field.check_can_add(user, db_field.rel.to)
 
-def plugin_options(channel,channel_name,widget_plugin_options,initial):
-    """ Make a JSON dumped dict of all options for the jquery ui plugin itself """
+
+def make_plugin_options(lookup, channel_name, widget_plugin_options, initial):
+    """ Make a JSON dumped dict of all options for the jQuery ui plugin."""
     po = {}
     if initial:
         po['initial'] = initial
-    po.update(getattr(channel,'plugin_options',{}))
+    po.update(getattr(lookup, 'plugin_options', {}))
     po.update(widget_plugin_options)
-    if not po.get('min_length'):
-        # backward compatibility: honor the channel's min_length attribute
-        # will deprecate that some day and prefer to use plugin_options
-        po['min_length'] = getattr(channel, 'min_length', 1)
     if not po.get('source'):
-        po['source'] = reverse('ajax_lookup',kwargs={'channel':channel_name})
+        po['source'] = reverse('ajax_lookup', kwargs={'channel': channel_name})
+
+    # allow html unless explicitly set
+    if po.get('html') is None:
+        po['html'] = True
+
     return {
         'plugin_options': mark_safe(json.dumps(po)),
-        # continue to support any custom templates that still expect these
-        'lookup_url': po['source'],
-        'min_length': po['min_length']
-        }
+        'data_plugin_options': force_escape(json.dumps(po))
+    }
 
 
-def bootstrap():
-    b = {}
-    b['bootstrap'] = getattr(settings,'AJAX_SELECT_BOOTSTRAP',False)
-    inlines = getattr(settings,'AJAX_SELECT_INLINES',None)
-
-    b['inline'] = ''
-    if inlines == 'inline':
-        directory = os.path.dirname( os.path.realpath(__file__) )
-        f = open(os.path.join(directory,"static","ajax_select","css","ajax_select.css"))
-        css = f.read()
-        f = open(os.path.join(directory,"static","ajax_select","js","ajax_select.js"))
-        js = f.read()
-        b['inline'] = mark_safe(u"""<style type="text/css">%s</style><script type="text/javascript">//<![CDATA[%s//]]></script>""" % (css,js))
-    elif inlines == 'staticfiles':
-        b['inline'] = mark_safe("""<style type="text/css">@import url("%sajax_select/css/ajax_select.css");</style><script type="text/javascript" src="%sajax_select/js/ajax_select.js"></script>""" % (settings.STATIC_URL,settings.STATIC_URL))
-
-    return b
-
-
+def pack_ids(ids):
+    if ids:
+        # |pk|pk| of current
+        return "|" + "|".join(str(pk) for pk in ids) + "|"
+    else:
+        return "|"
