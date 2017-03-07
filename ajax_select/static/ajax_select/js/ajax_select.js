@@ -31,7 +31,7 @@ $.fn.autocompleteselect = function(options) {
 				if (link){
 					href = 'href="' + link + '"' + ' target="_blank"';
 				}
-				$deck.append('<div><a ' + href + '>'+ killButton + repr + ' - ' + pk + '</a></div>');
+				$deck.append('<div>' + killButton + '<a ' + href + '>'+ repr + ' - ' + pk + '</a></div>');
 			} else {
           $('#' + id + '_on_deck > div').prepend(killButton);
 			}
