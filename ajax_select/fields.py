@@ -197,7 +197,7 @@ class AutoCompleteSelectMultipleWidget(forms.widgets.SelectMultiple):
 
         # text repr of currently selected items
         initial = [
-            [lookup.get_result(obj), obj.pk]
+            [lookup.get_result(obj), obj.pk, lookup.get_link(obj)]
             for obj in objects
         ]
 
