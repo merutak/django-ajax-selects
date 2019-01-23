@@ -1,6 +1,8 @@
 import json
 from django.http import HttpResponse
 from django.utils.encoding import force_text
+from django.utils.html import conditional_escape
+
 from ajax_select import registry
 
 
@@ -38,14 +40,19 @@ def ajax_lookup(request, channel):
     results = json.dumps([
         {
             lookup.id_field_name: force_text(getattr(item, 'pk', None)),
-            'value': lookup.get_result(item),
-            'match': lookup.format_match(item),
-            'repr': lookup.format_item_display(item),
-            'link': lookup.get_link(item),
-            'origin': origin(item),
+            'value': conditional_escape(lookup.get_result(item)),
+            'match': conditional_escape(lookup.format_match(item)),
+            'repr': conditional_escape(lookup.format_item_display(item)),
+            'link': safe_link(lookup.get_link(item)),
+            'origin': conditional_escape(origin(item)),
         } for item in instances
     ])
 
     response = HttpResponse(results, content_type='application/json')
     response['Cache-Control'] = 'max-age=0, must-revalidate, no-store, no-cache;'
     return response
+
+
+def safe_link(l):
+    assert '<' not in l
+    return l
