@@ -43,7 +43,7 @@ def ajax_lookup(request, channel):
             'value': conditional_escape(lookup.get_result(item)),
             'match': conditional_escape(lookup.format_match(item)),
             'repr': conditional_escape(lookup.format_item_display(item)),
-            'link': safe_link(lookup.get_link(item)),
+            'link': safe_link(lookup.get_link(item)) if request.user.is_authenticated() and request.user.is_staff else '',
             'origin': conditional_escape(origin(item)),
         } for item in instances
     ])
