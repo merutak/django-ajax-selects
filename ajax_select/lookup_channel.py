@@ -100,6 +100,7 @@ class LookupChannel(object):
         # return objects in the same order as passed in here
         if all(isinstance(aid, basestring) and aid.isdigit() for aid in ids):
             ids = [int(aid) for aid in ids]
+        ids = [getattr(aid, 'pk', aid) for aid in ids]
         things = self.model.objects.in_bulk(ids)
         return [things[aid] for aid in ids if aid in things]
 
