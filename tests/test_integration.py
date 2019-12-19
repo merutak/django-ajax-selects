@@ -5,7 +5,7 @@ so we are testing with exactly what Django gives.
 Specific errors that are discovered through these tests
 should be unit tested in test_fields.py
 """
-from __future__ import unicode_literals
+
 import django
 from django.forms.models import ModelForm
 from django.test import TestCase, Client

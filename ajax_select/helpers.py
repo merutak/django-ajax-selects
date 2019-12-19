@@ -54,7 +54,7 @@ def make_ajax_form(model, fieldlist, superclass=ModelForm, show_help_text=False,
             if hasattr(superclass.Meta, 'widgets'):
                 setattr(Meta, 'widgets', superclass.Meta.widgets)
 
-    for model_fieldname, channel in fieldlist.items():
+    for model_fieldname, channel in list(fieldlist.items()):
         f = make_ajax_field(model, model_fieldname, channel, show_help_text)
 
         TheForm.declared_fields[model_fieldname] = f

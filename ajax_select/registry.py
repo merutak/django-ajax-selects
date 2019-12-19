@@ -37,7 +37,7 @@ class LookupChannelRegistry(object):
                 - `{'channel': ('module.of.lookups', 'MyLookupClass')}`
                 - `{'channel': {'model': 'MyModelToBeLookedUp', 'search_field': 'field_to_search'}}`
         """
-        for channel, spec in lookup_specs.items():
+        for channel, spec in list(lookup_specs.items()):
             if spec is None:  # unset
                 if channel in self._registry:
                     del self._registry[channel]

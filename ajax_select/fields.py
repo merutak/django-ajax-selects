@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+
 import json
 from ajax_select.registry import registry
 from django import forms
@@ -408,7 +408,7 @@ def autoselect_fields_check_can_add(form, model, user):
     Check the form's fields for any autoselect fields and enable their
     widgets with green + button if permissions allow then to create the related_model.
     """
-    for name, form_field in form.declared_fields.items():
+    for name, form_field in list(form.declared_fields.items()):
         if isinstance(form_field, (AutoCompleteSelectMultipleField, AutoCompleteSelectField)):
             db_field = model._meta.get_field(name)
             form_field.check_can_add(user, db_field.rel.to)
